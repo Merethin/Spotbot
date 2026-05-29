@@ -18,6 +18,8 @@ def calculate_expected_delegate(nations) -> tuple[str | None, int]:
 def check_region_status(cursor, name) -> tuple[bool, bool]:
     cursor.execute("SELECT delegateauth, governor FROM regions_dump WHERE canon_name = %s", (name, ))
     result = cursor.fetchone()
+    if result is None:
+        return (False, False)
 
     return ("X" in result[0], result[1] == "0")
 
