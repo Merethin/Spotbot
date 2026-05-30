@@ -5,14 +5,20 @@ def create_sse_feed(url):
     res = requests.get(url, stream=True)
     yield from sseclient.SSEClient(res).events()
 
-def calculate_expected_delegate(nations) -> tuple[str | None, int]:
+def calculate_expected_delegate(current, nations) -> tuple[str | None, int]:
     members = set([n["name"] for n in nations])
     endorsements = [(n["name"], len(set(n["endorsements"]).intersection(members))) for n in nations]
     if len(endorsements) == 0:
         return (None, 0)
+    current_delegate_endos = 0
+    for name, endos in endorsements:
+        if name == current:
+            current_delegate_endos = endos
     result = sorted(endorsements, key=lambda e:e[1], reverse=True)[0]
     if result[1] == 0:
         return (None, 0)
+    if current_delegate_endos == result[1]:
+        return (current_delegate, current_delegate_endos)
     return result
 
 def check_region_status(cursor, name) -> tuple[bool, bool]:
@@ -67,7 +73,7 @@ for event in create_sse_feed(f"{retina_url}/sse/wadmit+wresign+wkick+ncte+wendo+
     obj = json.loads(event.data)
     for name, state in obj["state"].items():
         current_delegate = state["delegate"]
-        expected_delegate, endos = calculate_expected_delegate(state["nations"])
+        expected_delegate, endos = calculate_expected_delegate(current_delegate, state["nations"])
         executive, governorless = check_region_status(cursor, name)
 
         print(f"Processing: region={name}, native={current_delegate}, incoming={expected_delegate} ({endos}e)")
