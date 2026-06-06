@@ -21,21 +21,22 @@ def calculate_expected_delegate(current, nations) -> tuple[str | None, int]:
         return (current_delegate, current_delegate_endos)
     return result
 
-def check_region_status(cursor, name) -> tuple[bool, bool]:
-    cursor.execute("SELECT delegateauth, governor FROM regions_dump WHERE canon_name = %s", (name, ))
-    result = cursor.fetchone()
-    if result is None:
-        return (False, False)
+def fetch_regions(cursor) -> dict[str, str]:
+    cursor.execute("SELECT canon_name, delegateauth, governor FROM regions_dump")
+    result = cursor.fetchall()
 
-    return ("X" in result[0], result[1] == "0")
+    regions = {}
+    for row in result:
+        if row[2] == "0":
+            regions[row[0]] = "Governorless"
+        elif "X" in row[1]:
+            regions[row[0]] = "Executive Delegate"
 
-def generate_predicted_embed(region, native_del, new_del, endos, governorless):
+    return regions
+
+def generate_predicted_embed(region, native_del, new_del, endos, status):
     description = f"Region: **[{region}](https://www.nationstates.net/region={region})**\n"
-
-    if governorless:
-        description += "Status: **Governorless**\n\n"
-    else:
-        description += "Status: **Executive Delegate**\n\n"
+    description += f"Status: **{status}**\n\n"
 
     if native_del is None:
         description += f"Current delegate: **None**\n"
@@ -46,13 +47,9 @@ def generate_predicted_embed(region, native_del, new_del, endos, governorless):
 
     return DiscordEmbed(title="Delegate Change Incoming", description=description, color="ffa500")
 
-def generate_replaced_embed(region, native_del, new_del, governorless):
+def generate_replaced_embed(region, native_del, new_del, status):
     description = f"Region: **[{region}](https://www.nationstates.net/region={region})**\n"
-
-    if governorless:
-        description += "Status: **Governorless**\n\n"
-    else:
-        description += "Status: **Executive Delegate**\n\n"
+    description += f"Status: **{status}**\n\n"
 
     if native_del is None:
         description += f"**[{new_del}](https://www.nationstates.net/nation={new_del})** has seized the delegacy"
@@ -66,15 +63,19 @@ conn = psycopg2.connect(db_url)
 cursor = conn.cursor()
 
 vulnerable_regions = {}
+regions = fetch_regions(cursor)
 
 retina_url = os.getenv("RETINA_URL")
 webhook_url = os.getenv("WEBHOOK_URL")
-for event in create_sse_feed(f"{retina_url}/sse/wadmit+wresign+wkick+ncte+wendo+wunendo+move+ndel+rdel+ldel/world"):
+for event in create_sse_feed(f"{retina_url}/sse/wadmit+wresign+wkick+ncte+wendo+wunendo+move+ndel+rdel+ldel+rtboot/world"):
     obj = json.loads(event.data)
+    if obj["category"] == "rtboot":
+        regions = fetch_regions(cursor)
+        continue
     for name, state in obj["state"].items():
         current_delegate = state["delegate"]
         expected_delegate, endos = calculate_expected_delegate(current_delegate, state["nations"])
-        executive, governorless = check_region_status(cursor, name)
+        status = regions.get(name)
 
         print(f"Processing: region={name}, native={current_delegate}, incoming={expected_delegate} ({endos}e)")
 
@@ -82,13 +83,13 @@ for event in create_sse_feed(f"{retina_url}/sse/wadmit+wresign+wkick+ncte+wendo+
             if expected_delegate is None or current_delegate == expected_delegate:
                 continue
 
-            if not executive and not governorless:
+            if status is None:
                 continue
 
             print(f"Marking {name} as vulnerable")
 
             webhook = DiscordWebhook(url=webhook_url)
-            webhook.add_embed(generate_predicted_embed(name, current_delegate, expected_delegate, endos, governorless))
+            webhook.add_embed(generate_predicted_embed(name, current_delegate, expected_delegate, endos, status))
             webhook.execute()
 
             vulnerable_regions[name] = {
@@ -104,7 +105,7 @@ for event in create_sse_feed(f"{retina_url}/sse/wadmit+wresign+wkick+ncte+wendo+
                     print(f"Marking {name} as replaced")
 
                     webhook.remove_embeds()
-                    webhook.add_embed(generate_replaced_embed(name, native_delegate, current_delegate, governorless))
+                    webhook.add_embed(generate_replaced_embed(name, native_delegate, current_delegate, status))
                     webhook.edit()
 
                     del vulnerable_regions[name]
@@ -123,5 +124,5 @@ for event in create_sse_feed(f"{retina_url}/sse/wadmit+wresign+wkick+ncte+wendo+
                 continue
 
             webhook.remove_embeds()
-            webhook.add_embed(generate_predicted_embed(name, current_delegate, expected_delegate, endos, governorless))
+            webhook.add_embed(generate_predicted_embed(name, current_delegate, expected_delegate, endos, status))
             webhook.edit()
