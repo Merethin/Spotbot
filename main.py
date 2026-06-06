@@ -21,9 +21,11 @@ def calculate_expected_delegate(current, nations) -> tuple[str | None, int]:
         return (current_delegate, current_delegate_endos)
     return result
 
-def fetch_regions(cursor) -> dict[str, str]:
+def fetch_regions(conn) -> dict[str, str]:
+    cursor = conn.cursor()
     cursor.execute("SELECT canon_name, delegateauth, governor FROM regions_dump")
     result = cursor.fetchall()
+    cursor.close()
 
     regions = {}
     for row in result:
@@ -60,17 +62,16 @@ def generate_replaced_embed(region, native_del, new_del, status):
 
 db_url = os.getenv("DATABASE_URL")
 conn = psycopg2.connect(db_url)
-cursor = conn.cursor()
 
 vulnerable_regions = {}
-regions = fetch_regions(cursor)
+regions = fetch_regions(conn)
 
 retina_url = os.getenv("RETINA_URL")
 webhook_url = os.getenv("WEBHOOK_URL")
 for event in create_sse_feed(f"{retina_url}/sse/wadmit+wresign+wkick+ncte+wendo+wunendo+move+ndel+rdel+ldel+rtboot/world"):
     obj = json.loads(event.data)
     if obj["category"] == "rtboot":
-        regions = fetch_regions(cursor)
+        regions = fetch_regions(conn)
         continue
     for name, state in obj["state"].items():
         current_delegate = state["delegate"]
