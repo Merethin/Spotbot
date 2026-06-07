@@ -62,6 +62,7 @@ def generate_replaced_embed(region, native_del, new_del, status):
 
 db_url = os.getenv("DATABASE_URL")
 conn = psycopg2.connect(db_url)
+conn.autocommit = True
 
 vulnerable_regions = {}
 regions = fetch_regions(conn)
