@@ -69,7 +69,7 @@ regions = fetch_regions(conn)
 
 retina_url = os.getenv("RETINA_URL")
 webhook_url = os.getenv("WEBHOOK_URL")
-for event in create_sse_feed(f"{retina_url}/sse/wadmit+wresign+wkick+ncte+wendo+wunendo+move+ndel+rdel+ldel+rtboot/world"):
+for event in create_sse_feed(f"{retina_url}/sse/world"):
     obj = json.loads(event.data)
     if obj["category"] == "rtboot":
         regions = fetch_regions(conn)
