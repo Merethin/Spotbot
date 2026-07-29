@@ -35,11 +35,11 @@ def mark_vulnerable(name, current_delegate, expected_delegate, endos, status, ne
         "webhook": webhook
     }
 
-def mark_empty(name, nextupdate):
+def mark_empty(name, nextupdate, user_agent):
     global empty_regions, cte_webhook_url
 
     webhook = DiscordWebhook(url=cte_webhook_url)
-    webhook.add_embed(generate_cte_embed(name, nextupdate))
+    webhook.add_embed(generate_cte_embed(name, nextupdate, user_agent))
     webhook.execute()
 
     empty_regions[name] = webhook
