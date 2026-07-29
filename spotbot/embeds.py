@@ -29,6 +29,6 @@ def generate_replaced_embed(region, native_del, new_del, status, lastupdate):
 def generate_cte_embed(region, nextupdate, user_agent):
     description = f"Region: **[{region}](https://www.nationstates.net/region={region})**\n"
     description += f"Next Update (Est.): <t:{nextupdate}:R>\n\n"
-    description += f"**[Refound Link]([{region}](https://www.nationstates.net/page=create_region/template-overall=none?region_name={region}&desc=a&generated_by=Spotbot__by_Merethin__usedBy_{user_agent}))**"
+    description += f"**[Refound Link](https://www.nationstates.net/page=create_region/template-overall=none?region_name={region}&desc=a&generated_by=Spotbot__by_Merethin__usedBy_{user_agent})**"
 
     return DiscordEmbed(title="Empty Region", description=description, color="ff0000")
