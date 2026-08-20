@@ -16,8 +16,7 @@ def fetch_regions(conn) -> dict[str, str]:
     return regions
 
 def calculate_expected_delegate(current, nations) -> tuple[str | None, int]:
-    members = set([n["name"] for n in nations])
-    endorsements = [(n["name"], len(set(n["endorsements"]).intersection(members))) for n in nations]
+    endorsements = [(n["name"], n["validEndorsementCount"]) for n in nations]
 
     if len(endorsements) == 0:
         return (None, 0)
