@@ -144,7 +144,7 @@ async def region_loop(session):
             update_vulnerable(webhook, name, current_delegate, expected_delegate, endos, status, nextupdate)
 
 async def graphql_connection():
-    transport = WebsocketsTransport(url=f"ws://{retina_url}/sub", keep_alive_timeout=15)
+    transport = WebsocketsTransport(url=f"ws://{retina_url}/sub")
     client = Client(transport=transport)
 
     session = await client.connect_async(reconnecting=True)
