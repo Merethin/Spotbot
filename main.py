@@ -1,11 +1,12 @@
-import psycopg2, requests, os, json, asyncio
+import psycopg2, os, asyncio
 from discord_webhook import DiscordWebhook
 from spotbot.update import fetch_update_speeds, calculate_next_expected_update
 from spotbot.regions import fetch_regions, calculate_expected_delegate
 from spotbot.embeds import generate_predicted_embed, generate_replaced_embed, generate_cte_embed
-from tenacity import retry, retry_if_exception_type, stop_after_delay, wait_exponential
+from tenacity import retry, retry_if_exception_type, retry_unless_exception_type, stop_after_delay, wait_exponential
 from gql import Client, gql
 from gql.transport.websockets import WebsocketsTransport
+from gql.transport.exceptions import TransportQueryError
 
 db_url = os.getenv("DATABASE_URL")
 conn = psycopg2.connect(db_url)
@@ -57,16 +58,24 @@ def mark_replaced(webhook, name, native_delegate, current_delegate, status, last
     
     del vulnerable_regions[name]
 
+@retry(retry=retry_if_exception_type(Exception) & retry_unless_exception_type(TransportQueryError), stop=stop_after_delay(300), wait=wait_exponential())
 async def bootstrap_loop(session):
     global regions, minor_speed, major_speed
+
+    print("Starting bootstrap loop subscription")
+
     async for result in session.subscribe(gql('subscription { bootstrap { after { lastEventId } } }')):
         print(f"Bootstrap: last event ID = {result["bootstrap"]["after"]["lastEventId"]}")
         regions = fetch_regions(conn)
         minor_speed, major_speed = fetch_update_speeds(conn)
         print(f"Minor: {minor_speed} n/sec, major: {major_speed} n/sec")
 
+@retry(retry=retry_if_exception_type(Exception) & retry_unless_exception_type(TransportQueryError), stop=stop_after_delay(300), wait=wait_exponential())
 async def region_loop(session):
     global vulnerable_regions, empty_regions
+
+    print("Starting region loop subscription")
+
     async for result in session.subscribe(gql('subscription { regionChange(regions: []) { after { name delegateName lastupdate residentCount members { name validEndorsementCount } } } }')):
         state = result["regionChange"]["after"]
         if state is None:
@@ -134,15 +143,17 @@ async def region_loop(session):
 
             update_vulnerable(webhook, name, current_delegate, expected_delegate, endos, status, nextupdate)
 
-@retry(retry=retry_if_exception_type(Exception), stop=stop_after_delay(300), wait=wait_exponential())
 async def graphql_connection():
-    transport = WebsocketsTransport(url=f"ws://{retina_url}/sub")
+    transport = WebsocketsTransport(url=f"ws://{retina_url}/sub", keep_alive_timeout=15)
     client = Client(transport=transport)
 
-    async with client as session:
-        bootstrap_task = asyncio.create_task(bootstrap_loop(session))
-        region_task = asyncio.create_task(region_loop(session))
+    session = await client.connect_async(reconnecting=True)
 
-        await asyncio.gather(bootstrap_task, region_task)
+    bootstrap_task = asyncio.create_task(bootstrap_loop(session))
+    region_task = asyncio.create_task(region_loop(session))
+
+    await asyncio.gather(bootstrap_task, region_task)
+
+    session.close_async()
 
 asyncio.run(graphql_connection())
